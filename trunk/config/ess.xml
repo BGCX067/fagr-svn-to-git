@@ -1,0 +1,744 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd"
+	default-init-method="init" default-destroy-method="destroy">
+
+	<bean id="simulation" class="il.ac.tau.yoavram.pes.Simulation">
+		<property name="terminators">
+			<list>
+				<bean id="tickTerminator" class="il.ac.tau.yoavram.pes.terminators.TickTerminator">
+					<property name="endAtTick" value="${numberOfTicks}" />
+				</bean>
+			</list>
+		</property>
+		<property name="model" ref="model" />
+		<property name="dataGatherers"> <!-- each gatherer clears the aggregators it uses therefore can use only 
+				one instance declared in this *.xml file as a reference and reference it 
+				in each gatherer bean -->
+			<list>
+				<ref bean="uniAlleleDemes" />
+				<ref bean="faoAlleleDemes" />
+				<ref bean="allDemesCountDataGatherer" />
+				<ref bean="FFendOfCycle" />
+				<ref bean="FUendOfCycle" />
+				<ref bean="UUendOfCycle" />
+				<!-- for gathering by demes at the end of each step: -->
+				<!-- <ref bean="DemesUniFitnessDataGatherer" /> -->
+			</list>
+		</property>
+		<property name="blockAtEnd" value="${simulation.block}" />
+		<property name="ID" value="${jobName}.${time}" />
+		<property name="tickInterval" value="1" />
+	</bean>
+
+	<!--the "ancestor" and "model" beans are needed only in ess scenario and 
+		not in invasion scenario - because they are not to be changed -->
+	<bean id="ancestor" class="il.ac.tau.arielgue.fagr.IdealAncestor">
+		<property name="mutationRate" value="${mutationRate}" />
+		<property name="intervalOfNeutralGenes" value="${intervalOfNeutralGenes}" />
+		<property name="selectionCoefficient" value="${selectionCoefficient}" />
+		<property name="heterozygoteCoefficient" value="${heterozygoteCoefficient}" />
+		<property name="recombinationRate" value="${recombinationRate}" />
+		<property name="minimumFitness" value="${minimumFitness}" />
+		<property name="outcrossingModifier" value="${outcrossingModifier}" />
+		<property name="uniformOutcrossingProbability" value="${uniformOutcrossingProbability}" />
+		<!--<property name="faoOutcrossingProbability" value="${faoOutcrossingProbability}" 
+			/> -->
+	</bean>
+	<bean id="model" class="il.ac.tau.arielgue.fagr.OutcrossModel">
+		<property name="ancestor" ref="ancestor" />
+		<property name="serializedAtEnd" value="true" />
+		<property name="dir" value="${serialization.dir}/" />
+		<property name="ID" value="${jobName}" />
+		<property name="migrationProbability" value="${migrationProbability}" />
+		<property name="demeCapacity" value="${demeCapacity}" />
+		<property name="numberOfDemes" value="${numberOfDemes}" />
+		<property name="migrationCost" value="${migrationCost}" />
+		<property name="meanPredation" value="${meanPredation}" />
+		<property name="weatherCycle" value="${weatherCycle}" />
+		<property name="densityDependenceWeight" value="${densityDependenceWeight}" />
+		<property name="feedBackWeight" value="${feedBackWeight}" />
+		<property name="outcrossingStrategy">
+			<!-- in case of problems can use direct referencing to an outcrossing 
+				strategy class,e.g.: <bean class="il.ac.tau.arielgue.fagr.FeedbackOutcrossing"> -->
+			<bean class="il.ac.tau.arielgue.fagr.${outcrossingStrategy}">
+				<property name="outcrossingCost" value="${outcrossingCost}" />
+				<property name="stepValue" value="${stepValue}" />
+				<property name="fractionOfRegulatedFao" value="${fractionOfRegulatedFao}" />
+			</bean>
+
+		</property>
+		<property name="directDispersal" value="${directDispersal}" />
+		<!-- for gathering by demes in the middle of step() and not at the end: -->
+		<property name="intermediateDataGatherer1" ref="demesUniFitnessDataGatherer" />
+		<property name="intermediateDataGatherer2" ref="demesFaoFitnessDataGatherer" />
+		<property name="intermediateDataGatherer3" ref="demesFFDataGatherer" />
+		<property name="intermediateDataGatherer4" ref="demesFUDataGatherer" />
+		<property name="intermediateDataGatherer5" ref="demesUUDataGatherer" />
+	</bean>
+	<!-- we have 4 gatherers, each giving mean fit, mean het, fraction of total 
+		alleles and 5th gatherer counting total objects in the outcrossing pool and 
+		another one total population in the demes. !!!!!!!!!!NOTE: pool statistics 
+		are the statistics of the parents of the objects that the deme statistics 
+		test!!!!!!!!!!!!!! -->
+
+	<bean id="allDemesCountDataGatherer"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"> <!-- NOTE: Filters are AND filters (not OR) -->
+			<list>
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean together with setting 
+					in the *.properties file simulation.block=false -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="allDemesCount.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/allDemesCount.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<!-- <bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Sum"> -->
+				<!-- <property name="name" value="all demes count" /> -->
+				<!-- </bean> -->
+				<ref bean="meanFitnessAllDemes" />
+				<ref bean="bornInPoolAllDemes" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="all demes stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessAllDemes" />
+				</bean>
+				<ref bean="meanHeterozygosityAllDemes" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationHeterozygosity">
+					<property name="name" value="all demes mstdv heterozygosity" />
+					<property name="meanAggregator" ref="meanHeterozygosityAllDemes" />
+				</bean>
+				<ref bean="meanNeutralHeterozygosityAllDemes" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationNeutralHeterozygosity">
+					<property name="name" value="all demes mstdv neutral heterozygosity" />
+					<property name="meanAggregator" ref="meanNeutralHeterozygosityAllDemes" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="FFendOfCycle"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.FFfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+
+				<ref bean="FFmeanFitness" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="FF stdev fitness" />
+					<property name="meanAggregator" ref="FFmeanFitness" />
+				</bean>
+				<ref bean="FFfraction" />
+			</list>
+		</property>
+	</bean>
+	<bean id="FUendOfCycle"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.FUfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+
+				<ref bean="FUmeanFitness" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="FU stdev fitness" />
+					<property name="meanAggregator" ref="FUmeanFitness" />
+				</bean>
+				<ref bean="FUfraction" />
+			</list>
+		</property>
+	</bean>
+	<bean id="UUendOfCycle"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.UUfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+
+				<ref bean="UUmeanFitness" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="UU stdev fitness" />
+					<property name="meanAggregator" ref="UUmeanFitness" />
+				</bean>
+				<ref bean="UUfraction" />
+			</list>
+		</property>
+	</bean>
+	<bean id="uniAlleleDemes" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters">
+			<!-- Filters are AND filters (not OR) -->
+			<list>
+				<ref bean="UniAlleleFilAggDeme" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean together with setting 
+					in the *.properties file simulation.block=false -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="uniDemes.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/uniDemes.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+
+				<ref bean="UniAlleleFilAggDeme" />
+				<ref bean="meanFitnessUniAlleleDemes" />
+				<ref bean="UniAlleleBornInPool" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="uni demes min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="uni demes max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="uni demes stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessUniAlleleDemes" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+
+
+	<bean id="faoAlleleDemes" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<ref bean="FaoAlleleFilAggDeme" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<ref bean="csvMultiWriterListener" />
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean (together with setting 
+					in the *.properties file simulation.block=false, for not displaying the chart 
+					window) -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="faoDemes.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/faoDemes.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="FaoAlleleFilAggDeme" />
+				<ref bean="meanFitnessFaoAlleleDemes" />
+				<ref bean="FaoAlleleBornInPool" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="Fao demes min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="Fao demes max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="Fao demes stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessFaoAlleleDemes" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+
+
+
+	<!-- for gathering by demes at the end of each step: -->
+	<!-- aggregated per allele genotype -->
+	<bean id="demesUniFitnessDataGatherer" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.UniAlleleFilter" />
+			</list>
+		</property>
+
+		<property name="listeners">
+			<list>
+				<!-- for gathering by demes in the middle of step() and not at the end: -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="fitUallele.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+
+					</property>
+				</bean>
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean (together with setting 
+					in the *.properties file simulation.block=false, for not displaying the chart 
+					window) -->
+				<!-- <bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer"> -->
+				<!-- <property name="title" value="uniMeanfitInDeme.${jobName}.${time}" 
+					/> -->
+				<!-- <property name="showApplet" value="${simulation.block}" /> -->
+				<!-- <property name="filename" -->
+				<!-- value="${output.dir}/${jobName}/uniMeanfitInDeme.${jobName}.${time}" 
+					/> -->
+				<!-- </bean> -->
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<!-- <bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker"> 
+					<property name="name" value="tick" /> </bean> -->
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+					<property name="name" value=" Uni demes mean fitness" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="demesFaoFitnessDataGatherer" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.FaoAlleleFilter" />
+			</list>
+		</property>
+
+
+		<property name="listeners">
+			<list>
+				<!-- for gathering by demes in the middle of step() and not at the end: -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="fitFallele.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+					</property>
+				</bean>
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean (together with setting 
+					in the *.properties file simulation.block=false, for not displaying the chart 
+					window) -->
+				<!-- <bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer"> -->
+				<!-- <property name="title" value="uniMeanfitInDeme.${jobName}.${time}" 
+					/> -->
+				<!-- <property name="showApplet" value="${simulation.block}" /> -->
+				<!-- <property name="filename" -->
+				<!-- value="${output.dir}/${jobName}/uniMeanfitInDeme.${jobName}.${time}" 
+					/> -->
+				<!-- </bean> -->
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<!-- <bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker"> 
+					<property name="name" value="tick" /> </bean> -->
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+					<property name="name" value=" Fao demes mean fitness" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+
+
+
+
+
+
+	<bean id="demesFFDataGatherer"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.FFfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<!-- for gathering by demes in the middle of step() and not at the end: -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="FF.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+
+				<ref bean="FFmeanFitnessWithCost" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="FF stdev fitness" />
+					<property name="meanAggregator" ref="FFmeanFitnessWithCost" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount">
+					<property name="name" value="FF fraction" />
+					<property name="filter">
+						<bean class="il.ac.tau.arielgue.fagr.FFfilter"></bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="demesFUDataGatherer"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.FUfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<!-- for gathering by demes in the middle of step() and not at the end: -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="FU.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="FUmeanFitnessWithCost" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="FU stdev fitness" />
+					<property name="meanAggregator" ref="FUmeanFitnessWithCost" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount">
+					<property name="name" value="FU fraction" />
+					<property name="filter">
+						<bean class="il.ac.tau.arielgue.fagr.FUfilter"></bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="demesUUDataGatherer"
+		class="il.ac.tau.arielgue.fagr.statistics.OutcrossingDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<bean class="il.ac.tau.arielgue.fagr.UUfilter" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<!-- for gathering by demes in the middle of step() and not at the end: -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="UU.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="UUmeanFitnessWithCost" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="UU stdev fitness" />
+					<property name="meanAggregator" ref="UUmeanFitnessWithCost" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount">
+					<property name="name" value="UU fraction" />
+					<property name="filter">
+						<bean class="il.ac.tau.arielgue.fagr.UUfilter"></bean>
+					</property>
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="FFmeanFitness"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="FF fitness" />
+	</bean>
+	<bean id="FUmeanFitness"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="FU fitness" />
+	</bean>
+	<bean id="UUmeanFitness"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="UU fitness" />
+	</bean>
+	<bean id="FFmeanFitnessWithCost"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="FF fitness" />
+	</bean>
+	<bean id="FUmeanFitnessWithCost"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="FU fitness" />
+	</bean>
+	<bean id="UUmeanFitnessWithCost"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="UU fitness" />
+	</bean>
+	<bean id="FFfraction"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount"
+		scope="prototype">
+		<property name="name" value="FF fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.FFfilter"></bean>
+		</property>
+	</bean>
+	<bean id="FUfraction"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount"
+		scope="prototype">
+		<property name="name" value="FU fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.FUfilter"></bean>
+		</property>
+	</bean>
+	<bean id="UUfraction"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.FilterCount"
+		scope="prototype">
+		<property name="name" value="UU fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.UUfilter"></bean>
+		</property>
+	</bean>
+
+
+
+
+
+
+
+
+
+	<bean id="faoAlleleFil" class="il.ac.tau.arielgue.fagr.FaoAlleleFilter">
+	</bean>
+	<bean id="FaoAlleleFilAggPool" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator"
+		scope="prototype">
+		<property name="name" value="fao allele fraction " />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.FaoAlleleFilter"></bean>
+		</property>
+	</bean>
+	<bean id="UniAlleleFilAggPool" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator">
+		<property name="name" value="uni allele fraction pool" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.UniAlleleFilter"></bean>
+		</property>
+	</bean>
+	<bean id="FaoAlleleFilAggDeme" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator"
+		scope="singleton">
+		<property name="name" value="fao allele fraction " />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.FaoAlleleFilter"></bean>
+		</property>
+	</bean>
+	<bean id="UniAlleleFilAggDeme" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator">
+		<property name="name" value="uni allele fraction " />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.UniAlleleFilter"></bean>
+		</property>
+	</bean>
+	<bean id="FaoAlleleBornInPool"
+		class="il.ac.tau.yoavram.pes.statistics.aggregators.FilterFraction">
+		<property name="name" value="Fao allele born in pool fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.BornInPoolFilter"></bean>
+		</property>
+	</bean>
+	<bean id="UniAlleleBornInPool"
+		class="il.ac.tau.yoavram.pes.statistics.aggregators.FilterFraction">
+		<property name="name" value="Uni allele born in pool fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.BornInPoolFilter"></bean>
+		</property>
+	</bean>
+	<bean id="meanFitnessFaoAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="Fao pool mean fitness" />
+	</bean>
+	<bean id="meanFitnessUniAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="Uni pool mean fitness" />
+	</bean>
+	<bean id="meanFitnessFaoAlleleDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value=" Fao demes mean fitness" />
+	</bean>
+	<bean id="meanFitnessUniAlleleDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="Uni demes mean fitness" />
+	</bean>
+	<bean id="meanFitnessPool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="pool mean fitness" />
+	</bean>
+	<bean id="meanFitnessAllDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="All demes mean fitness" />
+	</bean>
+	<bean id="meanHeterozygosityAllDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanHeterozygosity">
+		<property name="name" value="All demes mean heterozygosity" />
+	</bean>
+	<bean id="meanNeutralHeterozygosityAllDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanNeutralHeterozygosity">
+		<property name="name" value="All demes mean neutral heterozygosity" />
+	</bean>
+	<bean id="bornInPoolAllDemes"
+		class="il.ac.tau.yoavram.pes.statistics.aggregators.FilterFraction">
+		<property name="name" value="born in pool fraction" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.BornInPoolFilter"></bean>
+		</property>
+	</bean>
+	<bean id="meanFitnessUniInDeme"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean Fitness Uni In Deme" />
+	</bean>
+	<bean id="meanFitnessFaoInDeme"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean Fitness Fao In Deme" />
+	</bean>
+	<bean id="csvMultiWriterListener"
+		class="il.ac.tau.arielgue.fagr.statistics.CsvWriterMultiListenerBugFix">
+		<property name="csvWriter">
+			<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+				<property name="filename" value="${jobName}.${time}" />
+				<property name="directory" value="${output.dir}/${jobName}" />
+				<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+				<property name="compress" value="false" />
+				<property name="writeTempFile" value="true" />
+
+			</bean>
+		</property>
+	</bean>
+
+
+</beans> 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

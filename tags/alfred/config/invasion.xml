@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd"
+	default-init-method="init" default-destroy-method="destroy">
+
+	<bean id="simulation" class="il.ac.tau.yoavram.pes.Simulation">
+		<property name="terminators">
+			<list>
+				<bean id="tickTerminator" class="il.ac.tau.yoavram.pes.terminators.TickTerminator">
+					<property name="endAtTick" value="${numberOfTicks}" />
+				</bean>
+			</list>
+		</property>
+		<property name="model" ref="model" />
+		<property name="dataGatherers"> <!-- each gatherer clears the aggregators it uses therefore can use only 
+				one instance declared in this *.xml file as a reference and reference it 
+				in each gatherer bean -->
+			<list>
+				<ref bean="uniAlleleDemes" />
+				<ref bean="faoAlleleDemes" />
+				<ref bean="uniAllelePool" />
+				<ref bean="faoAllelePool" />
+				<ref bean="poolCountDataGatherer" />
+			</list>
+		</property>
+		<property name="blockAtEnd" value="${simulation.block}" />
+		<property name="ID" value="${jobName}.${time}" />
+	</bean>
+	<bean class="il.ac.tau.yoavram.pes.SerializableModel.Factory" id="modelFactory">
+		<property name="filename"
+			value="${serialization.dir}/${serialization.filename}" />
+	</bean>
+	<bean id="model" class="il.ac.tau.arielgue.fagr.OutcrossModel"
+		factory-bean="modelFactory" factory-method="deserialize">
+		<property name="serializedAtEnd" value="false" />
+		<property name="ID" value="${jobName}.${time}" />
+		<property name="invasion">
+			<!-- if we want different invasion classes we can try class="${name}" 
+				or make a factory just like modelFactory and its use in model bean -->
+			<!-- or have a different xml file for each strategy and set: <bean class="il.ac.tau.arielgue.fagr.FaoInvasion"> -->
+			<bean class="${invasionClassName}">
+				<property name="invasionRate" value="${invasionRate}" />
+			</bean>
+		</property>
+	</bean>
+	<!--the "ancestor" and "model" beans are needed only in ess scenario and 
+		not in invasion scenario - because they are not to be changed -->
+
+
+	<!-- we have 4 gatherers, each giving mean fit, mean het, fraction of total 
+		alleles and 5th gatherer counting total objects in the outcrossing pool -->
+
+	<bean id="uniAlleleDemes" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters">
+			<!-- Filters are AND filters (not OR) -->
+			<list>
+				<ref bean="UniAlleleFilAgg" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="uniDemes.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" /><!-- 
+								if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+						</bean>
+					</property>
+				</bean><!-- when running on cluster, if you want not to save the chart 
+					file in order to save time - comment out the ChartDrawer bean together with 
+					setting in the *.properties file simulation.block=false -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="uniDemes.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/uniDemes.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+
+				<ref bean="UniAlleleFilAgg" />
+				<ref bean="meanFitnessUniAlleleDemes" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessUniAlleleDemes" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="uniAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.PoolAlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters">
+			<list>
+				<ref bean="UniAlleleFilAgg" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="uniPool.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+						</bean>
+					</property>
+				</bean>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="uniPool.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/uniPool.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="UniAlleleFilAgg" />
+				<ref bean="meanFitnessUniAllelePool" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessUniAllelePool" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="faoAlleleDemes" class="il.ac.tau.arielgue.fagr.statistics.AlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters"><!-- Filters are AND filters (not OR) -->
+			<list>
+				<ref bean="FaoAlleleFilAgg" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="faoDemes.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" /><!-- 
+								if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+						</bean>
+					</property>
+				</bean><!-- when running on cluster, if you want not to save the chart 
+					file in order to save time - comment out the ChartDrawer bean together with 
+					setting in the *.properties file simulation.block=false -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="faoDemes.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/faoDemes.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="FaoAlleleFilAgg" />
+				<ref bean="meanFitnessUniAllelePool" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessUniAllelePool" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="faoAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.PoolAlleleDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters">
+			<list>
+				<ref bean="FaoAlleleFilAgg" />
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="faoPool.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+						</bean>
+					</property>
+				</bean>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="faoPool.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/faoPool.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<ref bean="FaoAlleleFilAgg" />
+				<ref bean="meanFitnessFaoAllelePool" />
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MinFitness">
+					<property name="name" value="min fitness" />
+				</bean>
+				<bean class="il.ac.tau.arielgue.fagr.statistics.aggregators.MaxFitness">
+					<property name="name" value="max fitness" />
+				</bean>
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessFaoAllelePool" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="poolCountDataGatherer" class="il.ac.tau.arielgue.fagr.statistics.PoolDataGatherer">
+		<property name="model" ref="model" />
+		<property name="interval" value="${statistics.interval}" />
+		<property name="filters">
+			<list>
+			</list>
+		</property>
+		<property name="listeners">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.CsvWriterListener">
+					<property name="csvWriter">
+						<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+							<property name="filename" value="poolCount.${jobName}.${time}" />
+							<property name="directory" value="${output.dir}/${jobName}" />
+							<!--if wanting to compress and read with 7ZIP change value to TRUE -->
+							<property name="compress" value="false" />
+							<property name="writeTempFile" value="true" />
+
+						</bean>
+					</property>
+				</bean>
+				<!-- when running on cluster, if you want not to save the chart file 
+					in order to save time - comment out the ChartDrawer bean (together with setting 
+					in the *.properties file simulation.block=false, for not displaying the chart 
+					window) -->
+				<bean class="il.ac.tau.yoavram.pes.statistics.listeners.ChartDrawer">
+					<property name="title" value="poolCount.${jobName}.${time}" />
+					<property name="showApplet" value="${simulation.block}" />
+					<property name="filename"
+						value="${output.dir}/${jobName}/poolCount.${jobName}.${time}" />
+				</bean>
+			</list>
+		</property>
+		<property name="aggregators">
+			<list>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Ticker">
+					<property name="name" value="tick" />
+				</bean>
+				<bean class="il.ac.tau.yoavram.pes.statistics.aggregators.Sum">
+					<property name="name" value="count" />
+				</bean>
+				<ref bean="meanFitnessPool" />
+				<bean
+					class="il.ac.tau.arielgue.fagr.statistics.aggregators.StandardDeviationFitness">
+					<property name="name" value="stdev fitness" />
+					<property name="meanAggregator" ref="meanFitnessPool" />
+				</bean>
+			</list>
+		</property>
+	</bean>
+	<bean id="FaoAlleleFilAgg" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator">
+		<property name="name" value="FaoAlleleFilAgg" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.FaoAlleleFilter"></bean>
+		</property>
+	</bean>
+	<bean id="UniAlleleFilAgg" class="il.ac.tau.arielgue.fagr.AlleleFilterAggregator">
+		<property name="name" value="UniAlleleFilAgg" />
+		<property name="filter">
+			<bean class="il.ac.tau.arielgue.fagr.UniAlleleFilter"></bean>
+		</property>
+	</bean>
+
+
+
+	<bean id="meanFitnessFaoAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean fitness" />
+	</bean>
+	<bean id="meanFitnessUniAllelePool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean fitness" />
+	</bean>
+	<bean id="meanFitnessFaoAlleleDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean fitness" />
+	</bean>
+	<bean id="meanFitnessUniAlleleDemes"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean fitness" />
+	</bean>
+	<bean id="meanFitnessPool"
+		class="il.ac.tau.arielgue.fagr.statistics.aggregators.MeanFitness">
+		<property name="name" value="mean fitness" />
+	</bean>
+
+</beans> 
+
+
+
+
+
+
+
+
+
+
+
+
+
+		

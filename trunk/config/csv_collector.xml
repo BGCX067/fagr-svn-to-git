@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd"
+	default-init-method="init" default-destroy-method="close">
+
+	<bean class="il.ac.tau.yoavram.pes.utils.CsvCollector">
+		<property name="path" value="D:\workspace\DATA\out150911" />
+		<property name="writer">
+			<bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+				<!-- <property name="filename" value="XLS_RENAME_ME_BY_COLUMN_AND_ess" 
+					/> -->
+				<!--<property name="filename" value="f2co_faoDmeFrac" /> -->
+				<!-- <property name="filename" value="f2co_faoDemeFit" /> -->
+				<!-- <property name="filename" value="f2co_allFit" /> -->
+				<!-- <property name="filename" value="f2co_allHet" /> -->
+				<!-- <property name="filename" value="f2co_U_allele_born_pool" /> -->
+				<!-- <property name="filename" value="f2co_F_allele_born_pool" /> -->
+				<!-- <property name="filename" value="uni-demes-min-fit" /> -->
+				<!-- <property name="filename" value="fao-demes-min-fit" /> -->
+				<property name="filename" value="eq-mean-fit" />
+				<property name="directory" value="D:\workspace\DATA\out150911" />
+			</bean>
+		</property>
+		<property name="collector">
+			<bean class="il.ac.tau.yoavram.pes.statistics.collectors.LastRow">
+				<!-- the value of ticks not needed anymore since we use the tmp folders -->
+				<!-- <property name="ticks" value="1000" /> -->
+
+				<!--<property name="column" value="8" /> -->
+				<!-- <property name="column" value="9" /> -->
+				<!-- <property name="column" value="31" /> -->
+				<!-- <property name="column" value="34" /> -->
+				<!-- <property name="column" value="3" /> -->
+				<!-- <property name="column" value="10" /> -->
+				<!-- <property name="column" value="4" /> -->
+				<!-- <property name="column" value="11" /> -->
+				<!-- <property name="column" value="15" /> -->
+				<property name="column" value="32" />
+				<!-- column a=0. 1=uni-demes-fraction; 2= uni-demes-mean-fit 3=uni-allele-born-pool 
+					4=uni-demes-min-fit 8= fao-demes-fraction 9=fao-demes-mean-fit 10=fao-allele-born-pool 
+					11=fao-demes-min-fit 16=uni-pool-mean-fit 22=fao-pool-mean-fit 27=pool-count 
+					28=pool-mean-fit column 31=all demes mean fitness 32= all-demes-born-in-pool-fraction 
+					34=all-mean-het 35=all-mean-het-stdev 36=all-mean-hom -->
+				<!-- column -->
+			</bean>
+			<!-- <bean class="il.ac.tau.yoavram.pes.statistics.collectors.Average"> -->
+			<!-- <property name="column" value="1" /> -->
+			<!-- </bean> -->
+		</property>
+		<property name="filter">
+			<bean class="org.apache.commons.io.filefilter.WildcardFileFilter">
+				<!-- <constructor-arg name="wildcard" value="UnFBnMnD*.csv" /> 0 MODs: 
+					0=uni, 3=fao -->
+				<!--<constructor-arg name="wildcard" value="f2u*.co*.csv" /> -->
+				<constructor-arg name="wildcard" value="ess*.csv" />
+				<!-- <constructor-arg name="wildcard" value="f2uM*.co*.csv" /> -->
+				<!-- <constructor-arg name="wildcard" value="U150Mess*.csv" /> -->
+
+				<!-- 0 MODs: 0=uni, 3=fao -->
+			</bean>
+		</property>
+	</bean>
+</beans>

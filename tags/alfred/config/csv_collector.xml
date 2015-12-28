@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd"
+        default-init-method="init" default-destroy-method="close">
+
+        <bean class="il.ac.tau.yoavram.pes.utils.CsvCollector">
+                <property name="path"
+                        value="D:/yoavram/proevolution/results/pes2010/27-10_ess" />
+                <property name="writer">
+                        <bean class="il.ac.tau.yoavram.pes.io.CsvWriter">
+                                <property name="filename" value="mean_fitness" />
+                                <property name="directory"
+                                        value="D:/yoavram/proevolution/results/pes2010/27-10_ess" />
+                        </bean>
+                </property>
+                <property name="collector">
+                        <!--<bean class="il.ac.tau.yoavram.pes.statistics.collectors.LastRow"> 
+                                <property name="ticks" value="40000000" /> <property name="column" value="1" 
+                                /> </bean> -->
+                        <bean class="il.ac.tau.yoavram.pes.statistics.collectors.Average">
+                                <property name="column" value="1" />
+                        </bean>
+                </property>
+                <property name="filter">
+                        <bean class="org.apache.commons.io.filefilter.WildcardFileFilter">
+                                <constructor-arg name="wildcard" value="ess.*.csv" />
+                        </bean>
+                </property>
+        </bean>
+</beans>
